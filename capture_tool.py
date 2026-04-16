@@ -609,8 +609,9 @@ class EditorWindow:
 
         for item in self._history:
             photo = self._make_hist_photo(item["img"])
-            card = tk.Frame(self._hist_inner, bg=_C["card"],
-                            cursor="hand2")
+
+            # 카드 — 상대 배치로 삭제 버튼 오버레이
+            card = tk.Frame(self._hist_inner, bg=_C["card"], cursor="hand2")
             card.pack(fill="x", padx=4, pady=3)
 
             il = tk.Label(card, image=photo, bg=_C["card"])
@@ -622,12 +623,52 @@ class EditorWindow:
                           font=("맑은 고딕", 7))
             tl.pack(pady=(0, 4))
 
+            # 삭제 버튼 — 카드 우상단 오버레이
+            del_btn = tk.Button(
+                card, text="✕",
+                bg="#c0392b", fg="white", relief="flat",
+                font=("맑은 고딕", 7, "bold"),
+                padx=3, pady=0, cursor="hand2",
+                activebackground="#e74c3c", activeforeground="white",
+                command=lambda it=item: self._delete_history(it)
+            )
+            del_btn.place(relx=1.0, rely=0.0, anchor="ne", x=-3, y=3)
+
             self._hist_cards.append((item, card, il, tl))
 
             for w in (card, il, tl):
                 w.bind("<Button-1>",
                        lambda e, it=item, c=card: self._load_history(it, c))
                 w.bind("<MouseWheel>", self._hist_scroll)
+            del_btn.bind("<MouseWheel>", self._hist_scroll)
+
+    def _delete_history(self, item: dict):
+        """이력 항목 삭제 — 목록·파일·인덱스 모두 제거."""
+        # 현재 편집 중인 이미지와 같은 항목이면 선택 해제
+        if self._hist_sel is not None:
+            try:
+                sel_items = [it for it, c, *_ in self._hist_cards if c == self._hist_sel]
+                if sel_items and sel_items[0] is item:
+                    self._hist_sel = None
+            except Exception:
+                pass
+
+        # history 리스트에서 제거
+        self._history[:] = [it for it in self._history if it is not item]
+
+        # 디스크 파일 삭제 (CaptureApp 참조 통해)
+        try:
+            app_history = self.parent.history  # type: ignore
+            app_history[:] = [it for it in app_history if it is not item]
+            if item.get("_file"):
+                fp = os.path.join(self.parent._cache_dir, item["_file"])  # type: ignore
+                if os.path.exists(fp):
+                    os.unlink(fp)
+            self.parent._persist_index()  # type: ignore
+        except Exception:
+            pass
+
+        self._populate_history()
 
     def _load_history(self, item: dict, card: tk.Frame):
         """이력 항목 클릭 → 편집기에 해당 이미지 로드"""
@@ -2160,8 +2201,12 @@ class CaptureApp:
     # ── 히스토리 영속화 ──────────────────────────────────────────────────────────
 
     def _get_cache_dir(self) -> str:
+        import hashlib, uuid
+        # MAC 주소 기준으로 디바이스별 히스토리 격리
+        mac   = uuid.getnode()                          # 48-bit int
+        token = hashlib.sha256(str(mac).encode()).hexdigest()[:16]
         d = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")),
-                         "CaptureApp", "history")
+                         "CaptureApp", "history", token)
         os.makedirs(d, exist_ok=True)
         return d
 
