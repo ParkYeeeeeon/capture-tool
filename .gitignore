@@ -1,0 +1,14 @@
+# 빌드 산출물
+dist/
+build/
+*.spec
+
+# Python 캐시
+__pycache__/
+*.py[cod]
+
+# 실행 스크립트 (로컬 전용)
+실행.bat
+실행_노콘솔.bat
+_build.py
+_check.py
