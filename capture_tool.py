@@ -398,6 +398,8 @@ class EditorWindow:
         self.win.after(60, self._refresh)
         # 렌더 완료 후 캡처툴과 겹치지 않는 위치로 이동
         self.win.after(80, self._place_window)
+        # 창 열리자마자 포커스 확보 → 클릭 없이 Ctrl+C 바로 사용 가능
+        self.win.after(120, lambda: (self.win.lift(), self.win.focus_force()))
 
     # ── 프로퍼티 ─────────────────────────────────────────────────────────────
 
@@ -508,7 +510,6 @@ class EditorWindow:
         self.cv.bind("<Control-MouseWheel>",  self._cwheel)
         self.win.bind("<Control-z>", lambda e: self._undo())
         self.win.bind("<Control-y>", lambda e: self._redo())
-        self.win.bind("<Control-s>", lambda e: self._save())
 
         # ── 줌 오버레이 (캔버스 좌하단, 호버 시에만 표시) ──────────────
         self._zoom_hide_job = None
@@ -553,6 +554,10 @@ class EditorWindow:
 
         # ── 우측 캡처 이력 패널
         self._build_history_panel(outer)
+
+        # ── 히스토리 단축키 ──────────────────────────────────────────────
+        self.win.bind("<Control-c>", lambda e: self._hist_copy())
+        self.win.bind("<Control-s>", lambda e: self._hist_save())
 
     # ── 이력 패널 ────────────────────────────────────────────────────────────
 
@@ -641,6 +646,44 @@ class EditorWindow:
                        lambda e, it=item, c=card: self._load_history(it, c))
                 w.bind("<MouseWheel>", self._hist_scroll)
             del_btn.bind("<MouseWheel>", self._hist_scroll)
+
+    def _hist_selected(self):
+        """현재 선택된 히스토리 카드의 (item, card, img_label) 반환."""
+        for item, card, il, tl in self._hist_cards:
+            if card is self._hist_sel:
+                return item, card, il
+        return None, None, None
+
+    def _canvas_blink(self):
+        """이미지 위에 반투명 딤 오버레이를 잠시 표시해 복사 피드백을 준다.
+        캡처 직전 화면이 살짝 어두워지는 느낌과 동일한 방식."""
+        iw = int(self.img.width  * self.zoom)
+        ih = int(self.img.height * self.zoom)
+        x1, y1 = self._img_ox, self._img_oy
+        x2, y2 = x1 + iw, y1 + ih
+        self.cv.delete("copy_dim")
+        self.cv.create_rectangle(
+            x1, y1, x2, y2,
+            fill="#000000", stipple="gray25",
+            outline="", tags="copy_dim"
+        )
+        self.win.after(280, lambda: self.cv.delete("copy_dim"))
+
+    def _hist_copy(self):
+        """현재 편집기에 표시된 이미지를 클립보드에 복사."""
+        image_to_clipboard(self.img)
+        self._canvas_blink()
+
+    def _hist_save(self):
+        """현재 편집기에 표시된 이미지를 파일로 저장."""
+        name = f"capture_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+        path = filedialog.asksaveasfilename(
+            defaultextension=".png", initialfile=name,
+            filetypes=[("PNG", "*.png"), ("JPEG", "*.jpg"),
+                       ("BMP", "*.bmp"), ("모든 파일", "*.*")],
+            parent=self.win)
+        if path:
+            self.img.save(path)
 
     def _delete_history(self, item: dict):
         """이력 항목 삭제 — 목록·파일·인덱스 모두 제거."""
