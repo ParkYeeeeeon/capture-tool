@@ -786,7 +786,12 @@ class EditorWindow:
         img, txt_snap = state
         self.img = img
         self._text_items = txt_snap   # cid 없는 스냅샷, _refresh에서 재생성
+        # 스크롤 위치 보존 — _refresh 의 중앙이동 로직이 덮어쓰지 않도록
+        sx = self.cv.xview()[0]
+        sy = self.cv.yview()[0]
         self._refresh()
+        self.cv.xview_moveto(sx)
+        self.cv.yview_moveto(sy)
 
     def _undo(self):
         if not self.undo_stack:
@@ -2483,6 +2488,10 @@ class CaptureApp:
                 self._editor.zi   = self._editor._fit_idx()
                 self._editor.win.title(f"편집기  [{img.width}×{img.height}px]")
                 self._editor._refresh()
+                # 최소화 상태여도 즉시 팝업
+                self._editor.win.deiconify()
+                self._editor.win.lift()
+                self._editor.win.focus_force()
                 return
             except Exception:
                 pass
